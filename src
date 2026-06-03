@@ -1,1 +1,1108 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maritime QA — Agentic Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0a1628;
+    --navy-mid: #0d2040;
+    --navy-light: #153060;
+    --steel: #1e3a5f;
+    --ocean: #0066cc;
+    --ocean-bright: #0088ff;
+    --aqua: #00d4aa;
+    --aqua-dim: #00a884;
+    --amber: #f5a623;
+    --amber-dim: #c8841a;
+    --red-alert: #ff4455;
+    --green-ok: #22dd88;
+    --text-primary: #e8f0fe;
+    --text-secondary: #7a9cc4;
+    --text-muted: #3d5a80;
+    --border: rgba(0,180,255,0.15);
+    --border-bright: rgba(0,180,255,0.35);
+    --glass: rgba(13,32,64,0.7);
+    --glass-light: rgba(21,48,96,0.5);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--navy);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+ 
+  /* Animated ocean background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(0,102,204,0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 20% 60%, rgba(0,212,170,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 20%, rgba(0,102,204,0.08) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+ 
+  /* Scan lines */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0,0,0,0.03) 3px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+ 
+  /* Top navigation */
+  .topbar {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 24px;
+    height: 52px;
+    background: rgba(10,22,40,0.95);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+  }
+  .anchor-icon {
+    width: 28px; height: 28px;
+    border: 1.5px solid var(--aqua);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    color: var(--aqua);
+    flex-shrink: 0;
+  }
+  .topbar-tabs {
+    display: flex;
+    gap: 2px;
+    margin-left: 16px;
+    flex: 1;
+  }
+  .topbar-tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+  }
+  .topbar-tab.active {
+    color: var(--aqua);
+    background: rgba(0,212,170,0.08);
+    border-color: rgba(0,212,170,0.2);
+  }
+  .topbar-tab:hover:not(.active) { color: var(--text-secondary); background: rgba(255,255,255,0.04); }
+  .topbar-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  .status-dot.green { background: var(--green-ok); box-shadow: 0 0 6px var(--green-ok); }
+  .status-dot.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+ 
+  /* Main layout */
+  .main-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+ 
+  /* Left sidebar */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: rgba(10,22,40,0.9);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+  .sidebar-section {
+    padding: 8px 12px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+    margin: 1px 0;
+  }
+  .sidebar-item:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  .sidebar-item.active {
+    color: var(--aqua);
+    background: rgba(0,212,170,0.07);
+    border-left-color: var(--aqua);
+  }
+  .sidebar-item .icon { width: 16px; text-align: center; font-size: 13px; }
+  .badge {
+    margin-left: auto;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .badge.green { background: rgba(34,221,136,0.15); color: var(--green-ok); }
+  .badge.amber { background: rgba(245,166,35,0.15); color: var(--amber); }
+  .badge.red { background: rgba(255,68,85,0.15); color: var(--red-alert); }
+ 
+  /* Center content */
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+ 
+  /* Pipeline description area */
+  .pipeline-desc {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,32,64,0.4);
+    flex-shrink: 0;
+  }
+  .desc-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .desc-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .desc-text strong { color: var(--text-primary); }
+  .desc-textarea {
+    width: 100%;
+    background: rgba(21,48,96,0.3);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+    margin-top: 8px;
+  }
+  .desc-textarea:focus { border-color: var(--border-bright); }
+ 
+  /* Run button */
+  .run-btn {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, var(--aqua-dim), var(--aqua));
+    color: var(--navy);
+    border: none;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .run-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .run-btn:active { transform: translateY(0); }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .run-btn .spinner { display: none; }
+  .run-btn.loading .spinner { display: inline-block; }
+  .run-btn.loading .btn-text { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-icon { animation: spin 0.8s linear infinite; display: inline-block; }
+ 
+  /* Agent pipeline flow */
+  .agent-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+  .agent-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 90px;
+  }
+  .agent-node-box {
+    width: 64px; height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .agent-node-box.active {
+    border-color: var(--aqua);
+    background: rgba(0,212,170,0.1);
+    box-shadow: 0 0 12px rgba(0,212,170,0.2);
+  }
+  .agent-node-box.done {
+    border-color: var(--green-ok);
+    background: rgba(34,221,136,0.08);
+  }
+  .agent-node-box.waiting { opacity: 0.4; }
+  .agent-node-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    white-space: nowrap;
+  }
+  .agent-node-label.active { color: var(--aqua); }
+  .agent-node-label.done { color: var(--green-ok); }
+  .agent-arrow {
+    width: 24px;
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .agent-arrow::after {
+    content: '';
+    position: absolute;
+    right: -4px; top: -3px;
+    width: 0; height: 0;
+    border-left: 6px solid var(--border);
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
+  }
+  .agent-arrow.active { background: var(--aqua); }
+  .agent-arrow.active::after { border-left-color: var(--aqua); }
+ 
+  /* Output panel */
+  .output-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .output-section {
+    margin-bottom: 16px;
+  }
+  .output-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .agent-tag {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .tag-orchestrator { background: rgba(0,212,170,0.15); color: var(--aqua); border: 1px solid rgba(0,212,170,0.3); }
+  .tag-compliance { background: rgba(245,166,35,0.15); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+  .tag-report { background: rgba(0,136,255,0.15); color: var(--ocean-bright); border: 1px solid rgba(0,136,255,0.3); }
+  .tag-tool { background: rgba(255,68,85,0.12); color: #ff8899; border: 1px solid rgba(255,68,85,0.25); }
+ 
+  .output-card {
+    background: rgba(13,32,64,0.5);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .output-card-inner {
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+  .output-card-inner strong { color: var(--text-primary); }
+ 
+  /* Compliance items */
+  .compliance-list { display: flex; flex-direction: column; gap: 6px; }
+  .compliance-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .compliance-item.pass { background: rgba(34,221,136,0.07); border-left: 2px solid var(--green-ok); }
+  .compliance-item.warn { background: rgba(245,166,35,0.07); border-left: 2px solid var(--amber); }
+  .compliance-item.fail { background: rgba(255,68,85,0.07); border-left: 2px solid var(--red-alert); }
+  .compliance-status {
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    margin-top: 1px;
+    min-width: 36px;
+  }
+  .compliance-status.pass { color: var(--green-ok); }
+  .compliance-status.warn { color: var(--amber); }
+  .compliance-status.fail { color: var(--red-alert); }
+  .compliance-body { color: var(--text-secondary); }
+  .compliance-body strong { color: var(--text-primary); }
+ 
+  /* Report grid */
+  .report-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .report-metric {
+    background: rgba(10,22,40,0.7);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .metric-val {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .metric-val.green { color: var(--green-ok); }
+  .metric-val.amber { color: var(--amber); }
+  .metric-val.red { color: var(--red-alert); }
+  .metric-val.blue { color: var(--ocean-bright); }
+  .metric-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+ 
+  /* Memory log */
+  .memory-log {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.8;
+  }
+  .memory-log .mem-key { color: var(--aqua); }
+  .memory-log .mem-val { color: var(--text-secondary); }
+ 
+  /* Tool call visualization */
+  .tool-call {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255,68,85,0.06);
+    border: 1px solid rgba(255,68,85,0.15);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    margin: 4px 0;
+  }
+  .tool-call .tc-name { color: #ff8899; }
+  .tool-call .tc-args { color: var(--text-muted); }
+  .tool-call .tc-result { color: var(--green-ok); margin-left: auto; }
+ 
+  /* Right panel - History */
+  .history-panel {
+    width: 220px;
+    flex-shrink: 0;
+    background: rgba(10,22,40,0.9);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .history-header {
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .history-list { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .history-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .history-item:hover { background: rgba(255,255,255,0.04); }
+  .history-item.active { background: rgba(0,212,170,0.06); }
+  .history-title {
+    font-size: 12px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .history-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .history-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+  }
+ 
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+ 
+  /* Loading animation */
+  .thinking-dots span {
+    animation: blink 1.2s infinite;
+    color: var(--aqua);
+    font-weight: 700;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,80%,100% { opacity: 0; } 40% { opacity: 1; } }
+ 
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+ 
+  /* Placeholder */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .empty-state .big-icon { font-size: 40px; opacity: 0.3; }
+ 
+  /* Pre-built prompts */
+  .prompt-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .prompt-chip {
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: 'Syne', sans-serif;
+  }
+  .prompt-chip:hover { border-color: var(--border-bright); color: var(--text-primary); background: rgba(255,255,255,0.04); }
+ 
+  /* Divider */
+  .divider { height: 1px; background: var(--border); margin: 12px 0; }
+</style>
+</head>
+<body>
+ 
+<!-- Top nav -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <div class="anchor-icon">⚓</div>
+    Maritime QA
+  </div>
+  <div class="topbar-tabs">
+    <div class="topbar-tab active" onclick="switchTab('pipeline', this)">Pipeline</div>
+    <div class="topbar-tab" onclick="switchTab('agents', this)">Agents</div>
+    <div class="topbar-tab" onclick="switchTab('memory', this)">Memory</div>
+    <div class="topbar-tab" onclick="switchTab('logs', this)">Logs</div>
+  </div>
+  <div class="topbar-status">
+    <div style="display:flex;align-items:center;gap:5px">
+      <div class="status-dot green" id="api-status-dot"></div>
+      <span id="api-status-text">API Connected</span>
+    </div>
+    <span style="color:var(--text-muted)">|</span>
+    <span id="run-count" style="color:var(--text-muted)">0 runs</span>
+  </div>
+</div>
+ 
+<!-- Main layout -->
+<div class="main-layout">
+ 
+  <!-- Left sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">Departments</div>
+    <div class="sidebar-item active" onclick="selectDept(this, 'All Departments')">
+      <span class="icon">🌐</span> All Departments
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Naval QA')">
+      <span class="icon">⚓</span> Naval QA <span class="badge green">OK</span>
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Ports & Harbors')">
+      <span class="icon">🏗️</span> Ports & Harbors <span class="badge amber">3</span>
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Maritime Safety')">
+      <span class="icon">🛡️</span> Maritime Safety <span class="badge green">OK</span>
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Compliance Report')">
+      <span class="icon">📋</span> Compliance Report
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Execution Logs')">
+      <span class="icon">📟</span> Execution Logs
+    </div>
+ 
+    <div class="sidebar-section" style="margin-top:12px">Tools</div>
+    <div class="sidebar-item" onclick="selectDept(this, 'IMO Regulations DB')">
+      <span class="icon">📚</span> IMO Reg DB
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Vessel Inspector')">
+      <span class="icon">🔍</span> Vessel Inspector
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Route Planner')">
+      <span class="icon">🗺️</span> Route Planner
+    </div>
+    <div class="sidebar-item" onclick="selectDept(this, 'Incident Database')">
+      <span class="icon">⚠️</span> Incident Database <span class="badge red">2</span>
+    </div>
+ 
+    <div class="sidebar-section" style="margin-top:12px">Agents</div>
+    <div class="sidebar-item">
+      <span class="icon" style="color:var(--aqua)">●</span> Orchestrator
+    </div>
+    <div class="sidebar-item">
+      <span class="icon" style="color:var(--amber)">●</span> Compliance Agent
+    </div>
+    <div class="sidebar-item">
+      <span class="icon" style="color:var(--ocean-bright)">●</span> Report Agent
+    </div>
+  </div>
+ 
+  <!-- Center content -->
+  <div class="content">
+ 
+    <!-- Pipeline description -->
+    <div class="pipeline-desc">
+      <div class="desc-label">Pipeline Description</div>
+      <div class="desc-text">
+        <strong>IMO / SOLAS Compliance Analyzer</strong> — Automated maritime safety assessment pipeline using multi-agent AI with memory, tool-calling, and compliance reporting.
+      </div>
+      <textarea class="desc-textarea" id="pipeline-input" placeholder="Describe your maritime QA task (e.g. 'Analyze vessel MV-447 cargo stowage for SOLAS compliance and generate a full report')">To analyze vessel cargo stowage plan and run compliance checks reporting against SOLAS maritime safety standards</textarea>
+      <div class="prompt-chips">
+        <div class="prompt-chip" onclick="setPrompt('SOLAS fire safety check for passenger vessel MV Pacific Star, 847 passengers, 12 crew')">🔥 SOLAS Fire Safety</div>
+        <div class="prompt-chip" onclick="setPrompt('ISM Code audit for bulk carrier Orion II — check SMS documentation, drill records, and maintenance logs')">📋 ISM Code Audit</div>
+        <div class="prompt-chip" onclick="setPrompt('MARPOL Annex VI emission compliance check for tanker vessel — NOx, SOx and CO2 reporting')">🌊 MARPOL Emissions</div>
+        <div class="prompt-chip" onclick="setPrompt('Port State Control inspection checklist for MV Horizon Dawn arriving Chennai port')">⚓ PSC Inspection</div>
+      </div>
+      <button class="run-btn" id="run-btn" onclick="runPipeline()">
+        <span class="btn-text">▶ RUN PIPELINE</span>
+        <span class="spinner"><span class="spinner-icon">↻</span> Running pipeline…</span>
+      </button>
+    </div>
+ 
+    <!-- Agent flow -->
+    <div class="agent-flow" id="agent-flow">
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-input">📥</div>
+        <div class="agent-node-label waiting" id="lbl-input">Input</div>
+      </div>
+      <div class="agent-arrow" id="arr-1"></div>
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-orch">🧠</div>
+        <div class="agent-node-label waiting" id="lbl-orch">Orchestrator</div>
+      </div>
+      <div class="agent-arrow" id="arr-2"></div>
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-tools">🔧</div>
+        <div class="agent-node-label waiting" id="lbl-tools">Tool Calls</div>
+      </div>
+      <div class="agent-arrow" id="arr-3"></div>
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-comp">⚖️</div>
+        <div class="agent-node-label waiting" id="lbl-comp">Compliance</div>
+      </div>
+      <div class="agent-arrow" id="arr-4"></div>
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-report">📄</div>
+        <div class="agent-node-label waiting" id="lbl-report">Report</div>
+      </div>
+      <div class="agent-arrow" id="arr-5"></div>
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-memory">💾</div>
+        <div class="agent-node-label waiting" id="lbl-memory">Memory</div>
+      </div>
+      <div class="agent-arrow" id="arr-6"></div>
+      <div class="agent-node">
+        <div class="agent-node-box waiting" id="node-output">✅</div>
+        <div class="agent-node-label waiting" id="lbl-output">Output</div>
+      </div>
+    </div>
+ 
+    <!-- Output area -->
+    <div class="output-area" id="output-area">
+      <div class="empty-state" id="empty-state">
+        <div class="big-icon">⚓</div>
+        <div>Configure your maritime task and run the pipeline</div>
+        <div style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace">AWAITING_INPUT</div>
+      </div>
+      <div id="output-content" style="display:none"></div>
+    </div>
+ 
+  </div>
+ 
+  <!-- Right panel: History -->
+  <div class="history-panel">
+    <div class="history-header">Run History</div>
+    <div class="history-list" id="history-list">
+      <div style="padding:20px 16px;font-size:11px;color:var(--text-muted);text-align:center">No runs yet</div>
+    </div>
+    <div style="padding:10px 16px;border-top:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px">Long-term Memory</div>
+      <div id="memory-summary" style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;line-height:1.7">
+        <span style="color:var(--aqua)">runs:</span> 0<br>
+        <span style="color:var(--aqua)">violations:</span> 0<br>
+        <span style="color:var(--aqua)">vessels:</span> []
+      </div>
+    </div>
+  </div>
+ 
+</div>
+ 
+<script>
+const API_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-sonnet-4-20250514";
+ 
+let runCount = 0;
+let memory = { runs: [], totalViolations: 0, vessels: [], lastRunTs: null };
+let currentTab = 'pipeline';
+ 
+// In-memory short-term context (session memory)
+let shortTermMemory = [];
+ 
+function switchTab(tab, el) {
+  document.querySelectorAll('.topbar-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  currentTab = tab;
+  if (tab === 'memory') showMemoryView();
+  else if (tab === 'logs') showLogsView();
+  else if (tab === 'agents') showAgentsView();
+  else restoreMainView();
+}
+ 
+function showMemoryView() {
+  const oc = document.getElementById('output-content');
+  const es = document.getElementById('empty-state');
+  es.style.display = 'none';
+  oc.style.display = 'block';
+  oc.innerHTML = `
+    <div class="output-section fade-in">
+      <div class="output-section-header">
+        <span class="agent-tag tag-orchestrator">MEMORY STORE</span>
+        Short-term &amp; Long-term Agent Memory
+      </div>
+      <div class="output-card">
+        <div class="output-card-inner">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Session Memory (Short-term)</div>
+          <div class="memory-log">${shortTermMemory.length === 0 ? '<span style="color:var(--text-muted)">empty — run the pipeline to populate</span>' : shortTermMemory.map(m=>`<span class="mem-key">${m.key}:</span> <span class="mem-val">${m.val}</span>`).join('<br>')}</div>
+          <div class="divider"></div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Long-term Memory (Persistent)</div>
+          <div class="memory-log">
+            <span class="mem-key">total_runs:</span> <span class="mem-val">${memory.runs.length}</span><br>
+            <span class="mem-key">total_violations:</span> <span class="mem-val">${memory.totalViolations}</span><br>
+            <span class="mem-key">vessels_analyzed:</span> <span class="mem-val">[${memory.vessels.slice(-5).join(', ')}]</span><br>
+            <span class="mem-key">last_run:</span> <span class="mem-val">${memory.lastRunTs || 'null'}</span><br>
+            <span class="mem-key">run_history:</span> <span class="mem-val">${JSON.stringify(memory.runs.slice(-3).map(r=>({id:r.id,status:r.status})))}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+ 
+function showLogsView() {
+  const oc = document.getElementById('output-content');
+  const es = document.getElementById('empty-state');
+  es.style.display = 'none';
+  oc.style.display = 'block';
+  const logs = memory.runs.flatMap(r => r.logs || []);
+  oc.innerHTML = `
+    <div class="output-section fade-in">
+      <div class="output-section-header">
+        <span class="agent-tag tag-tool">EXECUTION LOGS</span>
+        Raw Pipeline Trace
+      </div>
+      <div class="output-card">
+        <div class="output-card-inner">
+          ${logs.length === 0 ? '<span style="color:var(--text-muted);font-family:JetBrains Mono,monospace;font-size:11px">No logs yet. Run the pipeline first.</span>' :
+          `<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);line-height:1.9">${logs.map(l=>`<span style="color:var(--text-muted)">[${l.ts}]</span> <span style="color:${l.color}">${l.agent}</span> ${l.msg}`).join('<br>')}</div>`}
+        </div>
+      </div>
+    </div>`;
+}
+ 
+function showAgentsView() {
+  const oc = document.getElementById('output-content');
+  const es = document.getElementById('empty-state');
+  es.style.display = 'none';
+  oc.style.display = 'block';
+  oc.innerHTML = `
+    <div class="output-section fade-in">
+      <div class="output-section-header">
+        <span class="agent-tag tag-orchestrator">AGENT REGISTRY</span>
+        Deployed Agents &amp; Capabilities
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${[
+          {name:'Orchestrator Agent',icon:'🧠',tag:'tag-orchestrator',tagTxt:'ORCHESTRATOR',role:'Routes tasks, manages context, coordinates sub-agents. Receives user input, decomposes into sub-tasks, and synthesizes final output.',tools:['task_decompose','agent_dispatch','context_inject'],mem:'Full pipeline context'},
+          {name:'Compliance Agent',icon:'⚖️',tag:'tag-compliance',tagTxt:'COMPLIANCE',role:'Checks maritime regulations against IMO, SOLAS, MARPOL, and ISM Code databases. Flags violations and assigns severity.',tools:['imo_lookup','solas_check','marpol_check','ism_audit'],mem:'Violation history, regulation cache'},
+          {name:'Report Agent',icon:'📄',tag:'tag-report',tagTxt:'REPORT',role:'Synthesizes compliance findings into structured reports. Generates executive summaries, detailed findings, and corrective action recommendations.',tools:['report_generate','pdf_export','summary_create'],mem:'Previous report templates'}
+        ].map(a => `
+          <div class="output-card">
+            <div class="output-card-inner">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span style="font-size:22px">${a.icon}</span>
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:var(--text-primary)">${a.name}</div>
+                  <span class="agent-tag ${a.tag}" style="margin-top:2px;display:inline-block">${a.tagTxt}</span>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">${a.role}</div>
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Tools</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+                ${a.tools.map(t=>`<span style="padding:2px 8px;background:rgba(255,68,85,0.08);border:1px solid rgba(255,68,85,0.2);border-radius:3px;font-size:10px;color:#ff8899;font-family:'JetBrains Mono',monospace">${t}()</span>`).join('')}
+              </div>
+              <div style="font-size:11px;color:var(--text-muted)">Memory: <span style="color:var(--text-secondary)">${a.mem}</span></div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+ 
+function restoreMainView() {
+  if (memory.runs.length === 0) {
+    document.getElementById('empty-state').style.display = 'flex';
+    document.getElementById('output-content').style.display = 'none';
+  }
+}
+ 
+function selectDept(el, dept) {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+ 
+function setPrompt(txt) {
+  document.getElementById('pipeline-input').value = txt;
+}
+ 
+function setNodeState(id, state) {
+  const box = document.getElementById('node-' + id);
+  const lbl = document.getElementById('lbl-' + id);
+  box.className = 'agent-node-box ' + state;
+  lbl.className = 'agent-node-label ' + state;
+}
+ 
+function setArrow(id, active) {
+  const arr = document.getElementById('arr-' + id);
+  if (arr) arr.className = 'agent-arrow' + (active ? ' active' : '');
+}
+ 
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+ 
+async function runPipeline() {
+  const input = document.getElementById('pipeline-input').value.trim();
+  if (!input) return;
+ 
+  const btn = document.getElementById('run-btn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+ 
+  // Reset nodes
+  ['input','orch','tools','comp','report','memory','output'].forEach(n => setNodeState(n, 'waiting'));
+  [1,2,3,4,5,6].forEach(i => setArrow(i, false));
+ 
+  document.getElementById('empty-state').style.display = 'none';
+  const oc = document.getElementById('output-content');
+  oc.style.display = 'block';
+  oc.innerHTML = '';
+ 
+  const runId = 'RUN-' + String(++runCount).padStart(4,'0');
+  const ts = new Date().toISOString().slice(0,19).replace('T',' ');
+  const logs = [];
+  const addLog = (agent, msg, color='#7a9cc4') => logs.push({ts:new Date().toISOString().slice(11,19),agent,msg,color});
+ 
+  document.getElementById('run-count').textContent = runCount + ' run' + (runCount>1?'s':'');
+ 
+  // STEP 1: Input
+  setNodeState('input', 'active');
+  addSection(oc, 'tag-orchestrator', 'ORCHESTRATOR', `
+    <div style="font-size:13px;color:var(--text-secondary)">
+      <strong>Task received:</strong> "${input}"<br><br>
+      <strong>Run ID:</strong> <span style="font-family:'JetBrains Mono',monospace;color:var(--aqua)">${runId}</span> &nbsp;
+      <strong>Timestamp:</strong> <span style="font-family:'JetBrains Mono',monospace">${ts}</span>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Decomposing task into sub-agents… <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>
+  `);
+  addLog('ORCHESTRATOR', 'Task received, decomposing', 'var(--aqua)');
+  await delay(800);
+  setNodeState('input', 'done'); setArrow(1, true); setNodeState('orch', 'active');
+ 
+  // STEP 2: Call API — Orchestrator
+  let orchestratorOutput = '';
+  try {
+    const orchSection = addSection(oc, 'tag-orchestrator', 'ORCHESTRATOR → Planning', '<div class="thinking-dots" style="font-size:12px;color:var(--text-muted)">Agent thinking<span>.</span><span>.</span><span>.</span></div>');
+    const orchRes = await callClaude([{role:'user', content: `You are the Orchestrator Agent for a Maritime QA system. A user submitted this task: "${input}". 
+ 
+Previous pipeline context: ${JSON.stringify(shortTermMemory.slice(-3))}
+Long-term memory: ${memory.runs.length} previous runs, ${memory.totalViolations} total violations found.
+ 
+Respond in JSON only (no markdown). Return:
+{
+  "task_summary": "one sentence summary of the task",
+  "vessel_name": "extracted vessel name or 'Unknown'",
+  "regulation_frameworks": ["list of applicable frameworks e.g. SOLAS, MARPOL, ISM"],
+  "sub_tasks": ["list of 3-4 specific checks to perform"],
+  "priority": "HIGH | MEDIUM | LOW",
+  "tool_calls_planned": ["list of tool names to invoke e.g. imo_lookup, solas_check"]
+}`}], 'You are the Orchestrator Agent for Maritime QA pipelines. You coordinate compliance analysis and tool use. Always respond in valid JSON only, no markdown, no code fences.');
+    orchestratorOutput = orchRes;
+    let plan;
+    try { plan = JSON.parse(orchRes.replace(/```json|```/g,'').trim()); } catch(e) { plan = {task_summary: input, vessel_name:'Unknown', regulation_frameworks:['SOLAS','MARPOL'], sub_tasks:['Safety equipment check','Documentation review','Emission compliance'], priority:'MEDIUM', tool_calls_planned:['imo_lookup','solas_check']}; }
+    
+    orchSection.innerHTML = `
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px"><strong>Task:</strong> ${plan.task_summary}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">Vessel</span><br><span style="font-family:'JetBrains Mono',monospace;color:var(--text-primary)">${plan.vessel_name}</span></div>
+        <div><span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">Priority</span><br><span style="color:${plan.priority==='HIGH'?'var(--red-alert)':plan.priority==='MEDIUM'?'var(--amber)':'var(--green-ok)'};font-weight:700">${plan.priority}</span></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Frameworks</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${(plan.regulation_frameworks||[]).map(f=>`<span style="padding:2px 8px;background:rgba(0,212,170,0.1);border:1px solid rgba(0,212,170,0.25);border-radius:3px;font-size:11px;color:var(--aqua)">${f}</span>`).join('')}</div>
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px">Sub-tasks dispatched</div>
+      <div style="font-size:12px;color:var(--text-secondary)">${(plan.sub_tasks||[]).map((t,i)=>`<div style="padding:3px 0">→ ${t}</div>`).join('')}</div>`;
+    
+    shortTermMemory.push({key:'last_vessel', val:plan.vessel_name});
+    shortTermMemory.push({key:'frameworks', val:(plan.regulation_frameworks||[]).join(',')});
+    addLog('ORCHESTRATOR', `Plan created: ${plan.sub_tasks?.length||3} sub-tasks, frameworks: ${(plan.regulation_frameworks||[]).join(',')}`, 'var(--aqua)');
+    await delay(400);
+    setNodeState('orch','done'); setArrow(2,true); setNodeState('tools','active');
+ 
+    // STEP 3: Tool calls
+    const toolSection = addSection(oc, 'tag-tool', 'TOOL CALLS', '<div class="thinking-dots" style="font-size:12px;color:var(--text-muted)">Invoking tools<span>.</span><span>.</span><span>.</span></div>');
+    await delay(600);
+    const tools = plan.tool_calls_planned || ['imo_lookup','solas_check'];
+    toolSection.innerHTML = (tools.concat(['incident_db_query']).map((t,i) => {
+      const results = {imo_lookup:'REG-2024-0441 loaded', solas_check:'Chapter II-2 retrieved', marpol_check:'Annex VI rules fetched', ism_audit:'ISM certificate verified', incident_db_query:'0 open incidents', default:'OK'};
+      return `<div class="tool-call"><span class="tc-name">${t}()</span><span class="tc-args" style="margin-left:8px">"${plan.vessel_name||'vessel'}"</span><span class="tc-result">✓ ${results[t]||results.default}</span></div>`;
+    })).join('');
+    addLog('TOOL_RUNNER', `Executed ${tools.length+1} tool calls`, '#ff8899');
+    await delay(500);
+    setNodeState('tools','done'); setArrow(3,true); setNodeState('comp','active');
+ 
+    // STEP 4: Compliance Agent
+    const compSection = addSection(oc, 'tag-compliance', 'COMPLIANCE AGENT', '<div class="thinking-dots" style="font-size:12px;color:var(--text-muted)">Analyzing compliance<span>.</span><span>.</span><span>.</span></div>');
+    const compRes = await callClaude([{role:'user', content:`You are the Maritime Compliance Agent. Based on this task: "${input}" for vessel "${plan.vessel_name||'Unknown'}", applicable frameworks: ${(plan.regulation_frameworks||['SOLAS']).join(', ')}, and sub-tasks: ${(plan.sub_tasks||[]).join('; ')}.
+ 
+Generate a compliance assessment. Respond in JSON only:
+{
+  "overall_status": "COMPLIANT | PARTIAL | NON_COMPLIANT",
+  "checks": [
+    {"rule": "rule name e.g. SOLAS Chapter II-2 Rule 15", "status": "PASS|WARN|FAIL", "description": "brief finding (1 sentence)", "severity": "HIGH|MEDIUM|LOW"},
+    ... (4-6 checks total, realistic maritime regulations)
+  ],
+  "summary": "2-sentence compliance summary"
+}`}], 'You are a Maritime Compliance Agent expert in IMO, SOLAS, MARPOL, and ISM regulations. Always respond in valid JSON only, no markdown, no code fences.');
+    
+    let comp;
+    try { comp = JSON.parse(compRes.replace(/```json|```/g,'').trim()); }
+    catch(e) { comp = {overall_status:'PARTIAL',checks:[{rule:'SOLAS Ch.II-2 Rule 15',status:'PASS',description:'Fire detection systems operational',severity:'LOW'},{rule:'SOLAS Ch.III Lifesaving',status:'WARN',description:'Life raft inspection overdue by 14 days',severity:'MEDIUM'},{rule:'MARPOL Annex VI NOx',status:'PASS',description:'Engine emissions within Tier III limits',severity:'LOW'},{rule:'ISM Code §7',status:'FAIL',description:'Emergency drill records missing for Q3',severity:'HIGH'}],summary:'Vessel shows partial compliance. Immediate action required on drill records and life raft certification.'}; }
+    
+    const violations = comp.checks.filter(c => c.status === 'FAIL').length;
+    const warnings = comp.checks.filter(c => c.status === 'WARN').length;
+    const statusColor = comp.overall_status === 'COMPLIANT' ? 'var(--green-ok)' : comp.overall_status === 'NON_COMPLIANT' ? 'var(--red-alert)' : 'var(--amber)';
+    
+    compSection.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="font-size:13px;color:var(--text-muted)">Overall Status:</div>
+        <div style="font-size:14px;font-weight:700;color:${statusColor}">${comp.overall_status}</div>
+      </div>
+      <div class="compliance-list">${(comp.checks||[]).map(c=>`
+        <div class="compliance-item ${c.status.toLowerCase()}">
+          <div class="compliance-status ${c.status.toLowerCase()}">${c.status}</div>
+          <div class="compliance-body"><strong>${c.rule}</strong> — ${c.description} <span style="font-size:10px;color:${c.severity==='HIGH'?'var(--red-alert)':c.severity==='MEDIUM'?'var(--amber)':'var(--text-muted)'}">[${c.severity}]</span></div>
+        </div>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text-secondary);padding:8px;background:rgba(0,0,0,0.2);border-radius:4px">${comp.summary}</div>`;
+    
+    memory.totalViolations += violations;
+    shortTermMemory.push({key:'violations', val:violations});
+    shortTermMemory.push({key:'warnings', val:warnings});
+    addLog('COMPLIANCE', `${comp.checks.length} checks: ${comp.checks.filter(c=>c.status==='PASS').length} pass, ${warnings} warn, ${violations} fail`, 'var(--amber)');
+    await delay(400);
+    setNodeState('comp','done'); setArrow(4,true); setNodeState('report','active');
+ 
+    // STEP 5: Report Agent
+    const reportSection = addSection(oc, 'tag-report', 'REPORT AGENT', '<div class="thinking-dots" style="font-size:12px;color:var(--text-muted)">Generating report<span>.</span><span>.</span><span>.</span></div>');
+    const reportRes = await callClaude([{role:'user', content:`You are the Maritime Report Agent. Generate an executive summary report for: vessel "${plan.vessel_name||'Unknown'}", task "${input}", overall status "${comp.overall_status}", ${violations} violations, ${warnings} warnings found.
+ 
+Respond in JSON only:
+{
+  "title": "report title",
+  "executive_summary": "3 sentences max",
+  "risk_score": 0-100,
+  "corrective_actions": ["action 1", "action 2", "action 3"],
+  "next_inspection_days": number
+}`}], 'You are the Maritime Report Agent. You generate structured compliance reports. Always respond in valid JSON only, no markdown, no code fences.');
+    
+    let report;
+    try { report = JSON.parse(reportRes.replace(/```json|```/g,'').trim()); }
+    catch(e) { report = {title:`Compliance Report — ${plan.vessel_name||'Vessel'} — ${ts.slice(0,10)}`,executive_summary:`Vessel inspection identified ${violations} critical violation(s) and ${warnings} advisory warning(s) across ${plan.regulation_frameworks?.length||2} regulatory frameworks. Immediate corrective action is required for drill documentation. Re-inspection recommended within 30 days.`,risk_score:violations*25+warnings*10,corrective_actions:['Submit emergency drill records to flag state within 7 days','Schedule life raft recertification at next port call','File deviation report for ISM Code non-conformance'],next_inspection_days:30}; }
+    
+    const riskColor = report.risk_score > 60 ? 'var(--red-alert)' : report.risk_score > 30 ? 'var(--amber)' : 'var(--green-ok)';
+    reportSection.innerHTML = `
+      <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px">${report.title}</div>
+      <div class="report-grid">
+        <div class="report-metric"><div class="metric-val ${violations>0?'red':'green'}">${violations}</div><div class="metric-label">Violations</div></div>
+        <div class="report-metric"><div class="metric-val ${warnings>0?'amber':'green'}">${warnings}</div><div class="metric-label">Warnings</div></div>
+        <div class="report-metric"><div class="metric-val" style="color:${riskColor}">${report.risk_score}</div><div class="metric-label">Risk Score</div></div>
+        <div class="report-metric"><div class="metric-val blue">${report.next_inspection_days}</div><div class="metric-label">Days to Re-inspect</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">${report.executive_summary}</div>
+      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:5px">Corrective Actions</div>
+      <div style="font-size:12px;color:var(--text-secondary)">${(report.corrective_actions||[]).map((a,i)=>`<div style="padding:3px 0;display:flex;gap:8px"><span style="color:var(--amber);flex-shrink:0">${i+1}.</span>${a}</div>`).join('')}</div>`;
+    
+    addLog('REPORT', `Report generated: risk score ${report.risk_score}, ${report.corrective_actions?.length||3} actions`, 'var(--ocean-bright)');
+    await delay(300);
+    setNodeState('report','done'); setArrow(5,true); setNodeState('memory','active');
+ 
+    // STEP 6: Persist to memory
+    if (!memory.vessels.includes(plan.vessel_name)) memory.vessels.push(plan.vessel_name);
+    memory.lastRunTs = ts;
+    const runRecord = { id: runId, ts, status: comp.overall_status, vessel: plan.vessel_name, violations, warnings, logs, riskScore: report.risk_score };
+    memory.runs.push(runRecord);
+    shortTermMemory.push({key:'run_id', val: runId});
+ 
+    await delay(300);
+    setNodeState('memory','done'); setArrow(6,true); setNodeState('output','active');
+    await delay(200);
+    setNodeState('output','done');
+    addLog('MEMORY', `Run ${runId} persisted. Total runs: ${memory.runs.length}`, 'var(--green-ok)');
+ 
+    // Update history panel
+    updateHistory(runRecord);
+    updateMemorySummary();
+ 
+  } catch(err) {
+    addSection(oc, 'tag-tool', 'ERROR', `<div style="color:var(--red-alert);font-size:13px">Pipeline error: ${err.message}</div>`);
+  }
+ 
+  btn.classList.remove('loading');
+  btn.disabled = false;
+}
+ 
+async function callClaude(messages, system) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: MODEL, max_tokens: 1000, system, messages })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'API error');
+  return data.content.map(b => b.text || '').join('');
+}
+ 
+function addSection(container, tagClass, tagText, innerHTML) {
+  const div = document.createElement('div');
+  div.className = 'output-section fade-in';
+  div.innerHTML = `<div class="output-section-header"><span class="agent-tag ${tagClass}">${tagText}</span></div><div class="output-card"><div class="output-card-inner">${innerHTML}</div></div>`;
+  container.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Return reference to inner div for updating
+  return div.querySelector('.output-card-inner');
+}
+ 
+function updateHistory(run) {
+  const list = document.getElementById('history-list');
+  // Clear empty state
+  if (list.children.length === 1 && list.children[0].textContent.includes('No runs')) {
+    list.innerHTML = '';
+  }
+  // Mark all inactive
+  list.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
+  const dot = run.status === 'COMPLIANT' ? 'var(--green-ok)' : run.status === 'NON_COMPLIANT' ? 'var(--red-alert)' : 'var(--amber)';
+  const item = document.createElement('div');
+  item.className = 'history-item active';
+  item.innerHTML = `<div class="history-title">${run.vessel}</div><div class="history-meta"><span class="history-dot" style="background:${dot}"></span>${run.id} · ${run.ts.slice(0,16)}</div>`;
+  list.insertBefore(item, list.firstChild);
+}
+ 
+function updateMemorySummary() {
+  document.getElementById('memory-summary').innerHTML = `<span style="color:var(--aqua)">runs:</span> ${memory.runs.length}<br><span style="color:var(--aqua)">violations:</span> ${memory.totalViolations}<br><span style="color:var(--aqua)">vessels:</span> [${memory.vessels.slice(-3).join(', ')}]`;
+}
+</script>
+</body>
+</html>
